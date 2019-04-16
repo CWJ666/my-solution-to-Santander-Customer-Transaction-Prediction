@@ -1,0 +1,2087 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+
+import pandas as pd
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+#import math
+#from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis, LinearDiscriminantAnalysis
+#from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import roc_auc_score
+import warnings
+
+warnings.filterwarnings('ignore')
+data_train = pd.read_csv('D:/MLsource/data/santander-customer-transaction-prediction/train.csv')
+data_test = pd.read_csv('D:/MLsource/data/santander-customer-transaction-prediction/test.csv')
+#submission = pd.read_csv('D:/MLsource/data/santander-customer-transaction-prediction/sample_submission.csv')
+
+target = data_train.target
+
+data_train_id = data_train['ID_code']
+data_test_id = data_test['ID_code']
+features = [c for c in data_train.columns if c not in ['target', 'ID_code']]
+submission = pd.read_csv('D:/MLsource/data/santander-customer-transaction-prediction/submission_lgbm.csv')
+
+submission['target']=v
+
+# In[191]:
+
+
+v = submission.target.values
+for i in range(len(submission)):
+    if v[i]<0.1:
+        v[i]=0.0001
+
+
+# In[193]:
+
+
+submission.to_csv('D:/MLsource/data/santander-customer-transaction-prediction/submission_lgbm_test.csv', index=False)
+
+
+# In[198]:
+
+
+8980*0.25
+
+
+# In[2]:
+
+
+if 'target' in data_train.columns:
+    del data_train['target']
+if 's' in data_train.columns:
+    del data_train['s']
+    del data_test['s']
+scaler = StandardScaler().fit(data_train)
+data = pd.DataFrame(scaler.transform(data_train),columns=data_train.columns)
+data_t = pd.DataFrame(scaler.transform(data_test),columns=data_test.columns)
+data_train['target'] = target.values
+cor = data_train.corr().abs().unstack().sort_values(kind='quicksort').reset_index()
+cor = cor[cor['level_0']!=cor['level_1']]
+cor_target = cor[cor['level_0']=='target']
+s = cor_target[0].sum()
+
+col_s=0
+col_d = 0
+
+for col in data_train.columns:
+    if col not in ['s', 'target']:
+        col_s += data[col]*cor_target[cor_target['level_1']==col][0].values
+        col_d += data_t[col]*cor_target[cor_target['level_1']==col][0].values
+    
+data_train['s'] = col_s/s
+data_test['s'] = col_d/s
+
+
+# In[5]:
+
+
+import matplotlib.pyplot as plt
+if 'target' not in data_train.columns:
+    data_train['target'] = target.values
+data_train[data_train['target']==0]['s'].plot.kde(label='0',legend=True)
+data_train[data_train['target']==1]['s'].plot.kde(label='1',legend=True)
+plt.show()
+
+
+# In[10]:
+
+
+if 's' in data_train.columns:
+    del data_train['s']
+if 'target' in data_train.columns:
+    del data_train['target']
+    
+t_d, t_l = augment(data_train.values, target.values)
+t_d = pd.DataFrame(t_d, columns=data_train.columns)
+col_s=0
+
+for col in data_train.columns:
+    if col not in ['s', 'target']:
+        col_s += data[col]*cor_target[cor_target['level_1']==col][0].values
+t_d['s'] = col_s/s
+
+
+# In[11]:
+
+
+if 'target' not in t_d.columns:
+    t_d['target'] = t_l
+t_d[t_d['target']==0]['s'].plot.kde(label='0',legend=True)
+t_d[t_d['target']==1]['s'].plot.kde(label='1',legend=True)
+plt.show()
+
+
+# In[13]:
+
+
+
+# In[ ]:
+
+
+def augment(x,y,t=2):
+    
+    xs,xn = [],[]
+    
+    for i in range(t):
+        mask = y>0
+        x1 = x[mask].copy()
+        ids = np.arange(x1.shape[0])
+        for c in range(x1.shape[1]):
+            np.random.shuffle(ids)
+            x1[:,c] = x1[ids][:,c]
+        xs.append(x1)
+
+    for i in range(t//2):
+        mask = y==0
+        x1 = x[mask].copy()
+        ids = np.arange(x1.shape[0])
+        for c in range(x1.shape[1]):
+            np.random.shuffle(ids)
+            x1[:,c] = x1[ids][:,c]
+        xn.append(x1)
+
+    xs = np.vstack(xs)
+    xn = np.vstack(xn)
+    ys = np.ones(xs.shape[0])
+    yn = np.zeros(xn.shape[0])
+    x = np.vstack([x,xs,xn])
+    y = np.concatenate([y,ys,yn])
+    return x,y
+
+
+# In[12]:
+
+
+if 's' in data_train.columns:
+    del data_train['s']
+if 'target' in data_train.columns:
+    del data_train['target']
+    
+t_d, t_l = augment(data_train.values, target.values, t=1)
+t_d = pd.DataFrame(t_d, columns=data_train.columns)
+col_s=0
+
+for col in data_train.columns:
+    if col not in ['s', 'target']:
+        col_s += data[col]*cor_target[cor_target['level_1']==col][0].values
+t_d['s'] = col_s/s
+if 'target' not in t_d.columns:
+    t_d['target'] = t_l
+t_d[t_d['target']==0]['s'].plot.kde(label='0',legend=True)
+t_d[t_d['target']==1]['s'].plot.kde(label='1',legend=True)
+plt.show()
+
+
+# In[2]:
+
+
+data_train['target'] = target.values
+data_train = data_train.sample(frac=1)
+data_train.iloc[:18181].target.sum()
+
+
+# # 不同类别中的变量密度
+
+# In[38]:
+
+
+if 'target' not in data_train.columns:
+    data_train['target'] = target
+for col in data_train.columns:
+    data_train[data_train['target']==0][col].plot.kde(label='0', legend=True)
+    data_train[data_train['target']==1][col].plot.kde(label='1', legend=True)
+    plt.title(col)
+    plt.show()
+
+
+# ## TSNE可视化
+
+# In[4]:
+
+
+from sklearn import manifold
+
+
+# In[5]:
+
+
+tsne = manifold.TSNE(n_components=3, init='pca')
+x = tsne.fit_transform(data)
+
+
+# In[ ]:
+
+
+x = pd.DataFrame(x,columns=['first', 'second', 'third'])
+x.to_csv('D:/MLsource/data/santander-customer-transaction-prediction/tsne3.csv', index=False)
+
+
+# In[10]:
+
+
+from mpl_toolkits.mplot3d import Axes3D
+import pandas as pd
+get_ipython().run_line_magic('matplotlib', 'inline')
+
+#x = pd.read_csv('D:/MLsource/data/santander-customer-transaction-prediction/tsne3.csv')
+
+
+# In[13]:
+
+
+d1 = x.values[:,:2]
+d2 = x.values[:,[0,2]]
+d3 = x.values[:,-2:]
+
+
+# In[14]:
+
+
+d1_0 = d1[target==0]
+d1_1 = d1[target==1]
+
+d2_0 = d2[target==0]
+d2_1 = d2[target==1]
+
+d3_0 = d3[target==0]
+d3_1 = d3[target==1]
+
+
+# In[19]:
+
+
+fig = plt.figure(figsize=(30,10))
+plt.subplot(131)
+plt.scatter(d1_0[:,0],d1_0[:,1], c='r')
+plt.scatter(d1_1[:,0],d1_1[:,1], c='g')
+
+plt.subplot(132)
+plt.scatter(d2_0[:,0],d2_0[:,1], c='r')
+plt.scatter(d2_1[:,0],d2_1[:,1], c='g')
+
+plt.subplot(133)
+plt.scatter(d3_0[:,0],d3_0[:,1], c='r')
+plt.scatter(d3_1[:,0],d3_1[:,1], c='g')
+
+plt.show()
+
+
+# In[22]:
+
+
+import random
+
+
+# In[38]:
+
+
+3000/len(d0)*len(d1)
+
+
+# In[41]:
+
+
+loc0 = random.sample(list(range(len(d0))), 1500)
+loc1 = random.sample(list(range(len(d1))), 250)
+
+d0_s = d0[loc0]
+d1_s = d1[loc1]
+
+
+# In[ ]:
+
+
+
+
+
+# In[42]:
+
+
+fig = plt.figure()
+ax = Axes3D(fig)
+
+ax.scatter(d0_s[:,0],d0_s[:,1],d0_s[:,2], c='g', label='0')
+ax.scatter(d1_s[:,0],d1_s[:,1],d1_s[:,2], c='r', label='1')
+ax.legend(loc='best')
+
+ax.set_xlabel('X', fontdict={'size':15, 'color':'red'})
+ax.set_ylabel('Y', fontdict={'size':15, 'color':'red'})
+ax.set_zlabel('Z', fontdict={'size':15, 'color':'red'})
+
+plt.show()
+
+
+# In[58]:
+
+
+def accuracy(predict_proba_test,t_sample):
+    n = len(t_sample)
+
+
+    acc = 0
+    acc_0 = 0
+    acc_1 = 0
+    for i in range(len(t_sample)):
+        if predict_proba_test[i,0]>predict_proba_test[i,1]:
+            if t_sample[i] == 0 :
+                acc += 1
+                acc_0 += 1
+        else:
+            if t_sample[i] == 1:
+                acc += 1
+                acc_1 += 1
+
+    return acc/n,acc_0/sum(t_sample==0),acc_1/sum(t_sample==1)
+
+
+# # 数据探索
+
+# In[46]:
+
+
+cor.columns
+
+
+# In[31]:
+
+
+cor = data_train.corr().abs().unstack().sort_values(kind='quicksort').reset_index()
+cor = cor[cor['level_0']!=cor['level_1']]
+cor.head(5)
+
+
+# In[49]:
+
+
+#cor_target = cor[cor['level_0']=='target']
+cor_target.head()
+
+
+# In[4]:
+
+
+if 'target' not in data_train.columns:
+    data_train['target']=target
+t0_corr=data_train[data_train['target']==0].corr().abs().unstack().sort_values(kind='quicksort').reset_index()
+t0_corr = t0_corr[t0_corr['level_0']!=t0_corr['level_1']]
+t0_corr.head()
+
+
+# In[6]:
+
+
+if 'target' not in data_train.columns:
+    data_train['target']=target
+t1_corr=data_train[data_train['target']==1].corr().abs().unstack().sort_values(kind='quicksort').reset_index()
+t1_corr = t1_corr[t1_corr['level_0']!=t1_corr['level_1']]
+t1_corr.head()
+
+
+# In[58]:
+
+
+data_desc = data_train.describe()
+
+
+# In[59]:
+
+
+data_desc.columns
+
+
+# In[60]:
+
+
+data_desc.var_185
+
+
+# In[61]:
+
+
+data_train['var_185'].plot.kde(ind=100)
+
+
+# In[4]:
+
+
+import matplotlib.pyplot as plt
+
+
+# In[8]:
+
+
+data_train['target'] = target.values
+
+
+# In[9]:
+
+
+pd.plotting.parallel_coordinates(data_train,'target')
+plt.show()
+
+
+# In[10]:
+
+
+data0_desc = data_train[data_train['target']==0].describe()
+data1_desc = data_train[data_train['target']==1].describe()
+
+
+# In[12]:
+
+
+col = [x for x in data0_desc.columns if x not in ['target']]
+
+
+# In[6]:
+
+
+var = 'var_4'
+data_train[var].plot.kde(label='train',legend=True)
+data_test[var].plot.kde(label='test',legend=True)
+plt.show()
+
+
+# ## 原始数据
+
+# In[10]:
+
+
+data_train.columns
+
+
+# In[18]:
+
+
+data_train[data_train.columns[:200]].std().plot('hist')
+plt.title('columns std of raw data')
+
+
+# In[19]:
+
+
+data_train[data_train.columns[:200]].mean().plot('hist')
+plt.title('columns mean of raw data')
+
+
+# In[21]:
+
+
+plt.hist(data_train[data_train['target']==1][data_train.columns[:200]].mean()-data_train[data_train['target']==0][data_train.columns[:200]].mean())
+plt.title('mean of all columns of target=1 of raw data')
+
+
+# In[24]:
+
+
+plt.hist(data_trn[data_trn['target']==1][data_trn.columns[:200]].mean()-data_trn[data_trn['target']==0][data_trn.columns[:200]].mean())
+plt.title('mean of target=1 - mean of target=0 of scaler data')
+
+
+# In[25]:
+
+
+plt.hist(data_trn[data_trn['target']==1][data_trn.columns[:200]].std()-data_trn[data_trn['target']==0][data_trn.columns[:200]].std())
+plt.title('std of target=1 - std of target=0 of scaler data')
+
+
+# In[28]:
+
+
+data_trn[data_trn['target']==1][data_trn.columns[:200]].plot.kde(ind=100,legend=False)
+plt.title('distribution of 100 columns')
+
+
+# In[51]:
+
+
+plt.imshow(data_train[data_train.columns.difference(['target'])].corr())
+plt.colorbar()
+plt.title('cor')
+
+
+# In[54]:
+
+
+plt.scatter(data_train['var_12'].values,data_train['var_81'].values, alpha=0.5)
+
+
+# In[6]:
+
+
+col = data_train.columns
+data_train['target'] = target
+plt.scatter(data_train[data_train['target']==1][col],)
+
+
+# In[7]:
+
+
+# In[14]:
+
+
+#data_train['target']=target
+for i in range(200):
+    data_train[data_train['target']==1]['var_{}'.format(i)].plot.kde(label='1',legend=True)
+    data_train[data_train['target']==0]['var_{}'.format(i)].plot.kde(label='0',legend=True)
+    plt.title('var_{} distribution in class'.format(i))
+
+
+
+
+# # QDA  AUC=0.85  
+#  对数据不做任何处理
+
+# In[4]:
+
+
+QDA = QuadraticDiscriminantAnalysis()
+QDA.fit(data_train,target)
+
+
+# In[5]:
+
+
+#data_test_PCA = pca.fit_transform(data_test)
+predict_proba_test_QDA = QDA.predict_proba(data_test)
+predict_proba_train_QDA = QDA.predict_proba(data_train)
+
+
+# In[6]:
+
+
+roc_auc_score(target, predict_proba_train_QDA[:,1])
+
+
+# In[ ]:
+
+
+
+
+
+# In[13]:
+
+
+write_data(predict_proba_test[:,1],'submission_pca_qda')
+
+
+# In[21]:
+
+
+acc = 0
+acc_0 = 0
+acc_1 = 0
+for i in range(len(target)):
+    if predict_proba_test[i,0]>predict_proba_test[i,1]:
+        if target[i] == 0 :
+            acc += 1
+            acc_0 += 1
+    else:
+        if target[i] == 1:
+            acc += 1
+            acc_1 += 1
+
+
+# In[16]:
+
+
+acc/200000
+
+
+# In[17]:
+
+
+acc_0/sum(target==0)
+
+
+# In[18]:
+
+
+acc_1/sum(target==1)
+
+
+# In[22]:
+
+
+print(acc/200000,acc_0/sum(target==0),acc_1/sum(target==1))
+
+
+# ## 对数据进行标准化
+
+# In[2]:
+
+
+if 'target' in data_train.columns:
+    del data_train['target']
+scaler = StandardScaler().fit(data_train)
+data = pd.DataFrame(scaler.transform(data_train))
+data_t = pd.DataFrame(scaler.transform(data_test))
+
+
+# In[11]:
+
+
+data['target'] = target
+
+
+# ### naive bayes
+
+# In[12]:
+
+
+from sklearn.pipeline import make_pipeline
+from sklearn.naive_bayes import GaussianNB, ComplementNB, MultinomialNB
+from sklearn.preprocessing import QuantileTransformer
+from sklearn.model_selection import cross_val_score
+
+
+# In[31]:
+
+
+#pipeline = make_pipeline(QuantileTransformer(output_distribution='normal'),GaussianNB())
+#pipeline.fit(data,target)
+cross_val_score(pipeline,data,target,scoring='roc_auc',cv=10).mean()
+
+
+# In[33]:
+
+
+p = pipeline.predict_proba(data_t)
+submission = pd.read_csv('D:/MLsource/data/santander-customer-transaction-prediction/sample_submission.csv')
+submission['target'] = p[:,1]
+submission.to_csv('D:/MLsource/data/santander-customer-transaction-prediction/submission_naiveBayes.csv',index=False)
+
+
+# In[ ]:
+
+
+submission.to_csv('D:/MLsource/data/santander-customer-transaction-prediction/submission_naiveBayes.csv',index=False)
+
+
+# In[10]:
+
+
+data1.head()
+
+
+# In[14]:
+
+
+if 'target' in data1.columns:
+    del data1['target']
+clf = GaussianNB()
+clf.fit(data1,target)
+cross_val_score(clf,data1,target,scoring='roc_auc').mean()
+
+
+# In[18]:
+
+
+d = data_train.sample(frac=2, replace='True')
+
+
+# In[19]:
+
+
+len(d)
+
+
+# #### 数据平衡
+
+# In[3]:
+
+
+submission = pd.read_csv('D:/MLsource/data/santander-customer-transaction-prediction/sample_submission.csv')
+if 'target' in data_train.columns:
+    del data_train['target']
+scaler = StandardScaler().fit(data_train)
+data1 = pd.DataFrame(scaler.transform(data_train))
+data1['target'] = target
+data_t = pd.DataFrame(scaler.transform(data_test))
+
+
+# In[5]:
+
+
+for i in range(20):
+   
+    weights = []
+    for t in target:
+        if t==0:
+            weights.append(1)
+        else:
+            weights.append(3+i*0.01)
+    data = data1.sample(frac=1,replace=True,weights=weights)
+    t = data['target'].values
+    del data['target']
+    pipeline = make_pipeline(QuantileTransformer(output_distribution='normal'),GaussianNB())    
+    cvs = cross_val_score(pipeline,data,t,scoring='roc_auc',cv=10).mean()
+    if cvs > 0.89:
+        pipeline.fit(data,t)
+        p = pipeline.predict_proba(data_t)        
+        submission['target'] = p[:,1]
+        submission.to_csv('D:/MLsource/data/santander-customer-transaction-prediction/submission_naiveBayes_{}.csv'.format(3+i*0.01),index=False)
+    print(i,cvs)
+    
+
+
+# 2-4,0.2  
+# 0 0.8908036124311746  
+# 1 0.8905288105580812  
+# 2 0.8909169999225725  
+# 3 0.890274124080643  
+# 4 0.8913716294791776  
+# 5 0.8900231134239119  
+# 6 0.8914256245976645  
+# 7 0.8909513066208309  
+# 8 0.8899704731349125  
+# 9 0.8909255967146631  
+# 
+# 3-3.4,0.04  
+# 0 0.8909113323039515  
+# 1 0.8915397837782939  
+# 2 0.8914314931582131  
+# 3 0.8898283404731384  
+# 4 0.8915227502457895  
+# 5 0.8890549565063104  
+# 6 0.8898663805676857  
+# 7 0.890870167671374  
+# 8 0.8899290379101095  
+# 9 0.8904197112507584  
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[9]:
+
+
+QDA1 = QuadraticDiscriminantAnalysis()
+QDA1.fit(data,target)
+
+
+# In[11]:
+
+
+predict_proba_train_QDA1 = QDA1.predict_proba(data)
+roc_auc_score(target,predict_proba_train_QDA1[:,1])
+
+
+# In[36]:
+
+
+acc = 0
+acc_0 = 0
+acc_1 = 0
+for i in range(len(target)):
+    if predict_proba_test[i,0]>predict_proba_test[i,1]:
+        if target[i] == 0 :
+            acc += 1
+            acc_0 += 1
+    else:
+        if target[i] == 1:
+            acc += 1
+            acc_1 += 1
+
+
+# In[37]:
+
+
+print(acc/200000,acc_0/sum(target==0),acc_1/sum(target==1))
+
+
+# ### LDA  
+# 标准化数据
+
+# ### 自助法(bootstrap)
+
+# In[15]:
+
+
+del data_train['target']
+scaler = StandardScaler().fit(data_train)
+data = scaler.transform(data_train)
+data_t = scaler.transform(data_test)
+data_train['target'] = target
+
+
+# In[ ]:
+
+
+auc_train = 0
+p_te = np.zeros([200000,2])
+for i in range(100):   
+    d = data_train.sample(frac=1,replace=True)
+    t = d.target.values
+    del d['target']
+    d_ss = scaler.transform(d)
+    lda = LinearDiscriminantAnalysis()
+    lda.fit(d_ss,t)
+    pre_train = lda.predict_proba(d_ss)
+    pre_test = lda.predict_proba(data_t)
+    auc_train += roc_auc_score(t,pre_train[:,1])
+    p_te += pre_test
+    print('finishing...{}'.format(i))
+
+
+# In[22]:
+
+auc_train/100
+
+# In[126]:
+
+
+#对类别为0的欠采样，类别为1的过采样
+data_train['target'] = target
+weights = []
+for t in target:
+    if t==0:
+        weights.append(1)
+    else:
+        weights.append(3)
+weights = pd.Series(weights)
+d = data_train.sample(frac=1,replace = True,weights=weights)
+#d = pd.concat([d,d1])
+
+t_sample = d['target'].values
+del d['target']
+
+
+# In[127]:
+
+
+sum(t_sample==1)
+
+
+# In[128]:
+
+
+lda = LinearDiscriminantAnalysis()
+lda.fit(d,t_sample)
+
+
+# In[129]:
+
+
+n = len(t_sample)
+
+predict_proba_test = lda.predict_proba(d)
+
+acc = 0
+acc_0 = 0
+acc_1 = 0
+for i in range(len(t_sample)):
+    if predict_proba_test[i,0]>predict_proba_test[i,1]:
+        if t_sample[i] == 0 :
+            acc += 1
+            acc_0 += 1
+    else:
+        if t_sample[i] == 1:
+            acc += 1
+            acc_1 += 1
+
+print(acc/n,acc_0/sum(t_sample==0),acc_1/sum(t_sample==1))
+
+
+# In[67]:
+
+
+p = lda.predict_proba(data_test)
+
+
+# In[68]:
+
+
+write_data(p[:,1],'submission_lda_sample1')
+
+
+# In[61]:
+
+
+roc_auc_score(t_sample,predict_proba_test[:,1])
+
+
+# In[12]:
+
+
+lda1 = LinearDiscriminantAnalysis()
+lda1.fit(data_train,target)
+
+
+# In[13]:
+
+
+predict_proba_train_lda1 = lda1.predict_proba(data_train)
+roc_auc_score(target,predict_proba_train_lda1[:,1])
+
+
+# In[ ]:
+
+
+
+
+
+# # SVM(优化太慢了）
+
+# In[5]:
+
+
+ss = StandardScaler()
+ss.fit(data_train)
+data = ss.transform(data_train)
+data_pre = ss.transform(data_test)
+
+
+# In[6]:
+
+
+from sklearn import svm
+
+
+# In[ ]:
+
+
+clf = svm.SVC(gamma='scale')
+clf.fit(data,target)
+pre = clf.predict_proba(data_pre)
+
+
+# # DNN
+
+# In[2]:
+
+
+import tensorflow as tf
+from tensorflow import keras
+from dnn import dnn_layer
+from df_to_array import df_to_array
+
+
+# In[3]:
+
+
+data_train = df_to_array(data_train)
+data_test = df_to_array(data_test)
+target = np.array(target, dtype=np.float32)
+
+
+# In[4]:
+
+
+y = []
+for i in range(len(target)):
+    s = [0,0]
+    if target[i] == 0:
+        s[0] = 1
+    else:
+        s[1] = 1
+    y.append(s)
+
+y = np.array(y, dtype = np.float32)
+
+
+# In[5]:
+
+
+s = np.random.get_state()
+np.random.shuffle(data_train)
+np.random.set_state(s)
+np.random.shuffle(y)
+np.random.set_state(s)
+np.random.shuffle(target)
+
+val_data = data_train[:40000]
+val_labels = y[:40000]
+
+val_target = target[:40000]
+target = target[40000:]
+
+data_train = data_train[40000:]
+y = y[40000:]
+
+
+# In[6]:
+
+
+dataset = tf.data.Dataset.from_tensor_slices((data_train,y))
+dataset = dataset.batch(64)
+dataset = dataset.repeat()
+
+val_dataset = tf.data.Dataset.from_tensor_slices((val_data,val_labels))
+val_dataset = val_dataset.batch(64).repeat()
+
+
+# In[7]:
+
+
+model = keras.Sequential([
+    keras.layers.Dense(2,activation='softmax', kernel_regularizer=keras.regularizers.l2(0.1))
+])
+model.compile(optimizer=tf.train.RMSPropOptimizer(0.001),
+             loss = tf.keras.losses.categorical_crossentropy,
+             metrics = [tf.keras.metrics.categorical_crossentropy])
+
+
+# In[9]:
+
+
+model.fit(dataset, epochs=2500, steps_per_epoch=30,
+         validation_data = val_dataset,
+         validation_steps = 3)
+
+
+# In[10]:
+
+
+#pre_data = tf.data.Dataset.from_tensor_slices(val_data).batch(64).repeat()
+res = model.predict(val_dataset, steps = 625)
+
+
+# In[28]:
+
+
+res_train = model.predict(dataset, steps = int(160000/64))
+
+
+# In[29]:
+
+
+auc,_ = tf.metrics.auc(res_train[:,0], target, num_thresholds = 1000)
+
+sess = tf.InteractiveSession()
+
+sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
+print(sess.run(auc))
+
+sess.close()
+
+
+# In[26]:
+
+
+target.shape
+
+
+# In[30]:
+
+
+res.shape
+
+
+# In[24]:
+
+
+res_train[0]
+
+
+# In[46]:
+
+
+model.evaluate(val_dataset,steps=1)
+
+
+# In[72]:
+
+
+l = np.append(target,val_target)
+
+
+# In[73]:
+
+
+len(l)
+
+
+# In[74]:
+
+
+pre_dataset = tf.data.Dataset.from_tensor_slices((data_test,l)).batch(64).repeat()
+pre = model.predict(pre_dataset, steps=3125)
+
+
+# In[75]:
+
+
+pre[0]
+
+
+# In[80]:
+
+
+write_data(pre[:,0],'submission_dnn')
+
+
+# In[78]:
+
+
+s = pd.read_csv('D:/MLsource/data/santander-customer-transaction-prediction/submission_dnn.csv')
+
+
+# In[79]:
+
+
+len(s)
+
+
+
+# In[15]:
+
+
+tt = [data_train, data_test]
+
+
+# In[21]:
+
+
+data_train.columns.values[0:3]
+
+
+# In[1]:
+
+
+import lightgbm as lgb
+
+
+# In[2]:
+
+
+import pandas as pd
+
+# # 决策树
+
+# In[2]:
+
+
+from sklearn import tree
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import cross_val_score
+import graphviz
+
+
+# In[3]:
+
+# In[8]:
+
+
+#del data_train['target']
+#clf = tree.DecisionTreeClassifier(max_depth=3)
+#s = cross_val_score(clf, data_train, target, cv=10)
+#print(s)
+
+#clf = tree.DecisionTreeClassifier(max_depth=3)
+#clf.fit(data_train, target)
+#dot_data = tree.export_graphviz(clf, out_file=None, filled = True,
+                               #feature_names = data_train.columns,
+                               #class_names = ['N','Y'],
+                               #rounded = True,
+                               #special_characters = True)
+#graph = graphviz.Source(dot_data)
+#graph.render('tt')
+
+
+# In[86]:
+
+
+def bagging_dt(x, y, x_pre, n_estimators=1, min_samples_split=5, min_samples_leaf=1,
+               class_weight={0:1,1:1}):
+    
+    clf = RandomForestClassifier(n_estimators = n_estimators,
+                                      min_samples_split=min_samples_split,
+                                   min_samples_leaf=min_samples_leaf,
+                                   class_weight=class_weight)
+    
+    clf.fit(x,y)
+    
+    pre = clf.predict_proba(x_pre)
+    
+    return pre,clf
+
+
+# In[87]:
+
+
+#p = np.zeros([200000,2])
+#pre = bagging_dt(data_train,target,data_train,class_weight={0:1,1:3})
+#del data_train['target']
+pre,clf = bagging_dt(data_train,target,data_train,n_estimators=20,class_weight={0:1,1:3})
+
+
+# In[88]:
+
+
+roc_auc_score(target, pre[:,1])
+
+
+# In[89]:
+
+
+acc = accuracy(pre,target)
+
+
+# In[90]:
+
+
+acc
+
+
+# In[85]:
+
+
+submission = pd.read_csv('D:/MLsource/data/santander-customer-transaction-prediction/sample_submission.csv')
+
+
+# In[92]:
+
+
+pre_test = clf.predict_proba(data_test)
+
+
+# In[93]:
+
+
+submission['target'] = pre_test[:,1]
+
+
+# In[94]:
+
+
+submission.to_csv('D:/MLsource/data/santander-customer-transaction-prediction/submission_rfc.csv',index=False)
+
+
+# In[5]:
+
+
+import random
+n_esti = list(range(100,1000,50))
+max_dep = list(range(50,200,10))
+v = []
+for i in range(30):
+    for j in range(4):
+        print('running...',i,j)
+        n = random.sample(n_esti,1)[0]
+        m = random.sample(max_dep,1)[0]
+        if [j,n,m] in v:
+            continue
+        else:
+            v.append([j,n,m])
+        clf = RandomForestClassifier(n_estimators = n,max_depth=m,
+                            min_samples_split=5,
+                            min_samples_leaf=1,
+                            class_weight={0:1,1:j})
+        auc = cross_val_score(clf,data_train,target,scoring='roc_auc',cv=10).mean()
+        if auc>0.88:
+            print(i,j,n,m,auc)
+        del clf
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[29]:
+
+
+clf = tree.DecisionTreeClassifier(min_samples_split=5,
+                            min_samples_leaf=1,
+                            class_weight={0:1,1:3})
+    
+cross_val_score(clf,data_train,target,cv=10)
+
+
+# In[5]:
+
+
+from sklearn.ensemble import AdaBoostClassifier
+
+
+# In[24]:
+
+
+adaboost_clf = AdaBoostClassifier(base_estimator=tree.DecisionTreeClassifier(max_depth=1),
+                                  n_estimators=2000,
+                                 learning_rate=0.01)
+#cross_val_score(adaboost_clf,data_train,target,cv=5)
+adaboost_clf.fit(data_train[data_train.columns.difference(['target'])],target)
+p_train = adaboost_clf.predict_proba(data_train[data_train.columns.difference(['target'])])
+roc_auc_score(target,p_train[:,1])
+
+
+# In[16]:
+
+
+p = np.zeros([200000,2])
+p_train = np.zeros([200000,2])
+weights = []
+for t in target:
+    if t==0:
+        weights.append(1)
+    else:
+        weights.append(3)
+weights = pd.Series(weights)
+for i in range(5):
+    #data = data_train.sample(frac=1,replace=True,weights=weights)
+    #t = data.target.values
+    #del data['target']
+    adaboost_clf = AdaBoostClassifier(base_estimator=tree.DecisionTreeClassifier(max_depth=2),
+                                      n_estimators=50,
+                                      learning_rate=0.1)
+    adaboost_clf.fit(data_train[data_train.columns.difference(['target'])],target)
+    p_t = adaboost_clf.predict_proba(data_train[data_train.columns.difference(['target'])])
+    p0 = adaboost_clf.predict_proba(data_test)
+    p_train += p_t
+    p += p0
+
+
+# In[17]:
+
+
+p = p/5
+p_train = p_train/5
+
+
+# In[18]:
+
+
+roc_auc_score(target,p_train[:,1])
+
+
+# # GBDT
+
+# In[4]:
+
+
+#from sklearn.ensemble  import GradientBoostingClassifier
+from sklearn.model_selection import cross_val_score
+import lightgbm as lgb
+from hyperopt import hp
+from hyperopt import STATUS_OK
+from sklearn.model_selection import StratifiedKFold, KFold
+import warnings
+
+warnings.filterwarnings('ignore')
+
+
+# In[3]:
+
+
+#del clf
+weights = np.zeros(len(data_train))
+for i in range(len(target.values)):
+    if target[i]==0:
+        weights[i]=1
+    else:
+        weights[i]=1
+#if 'target' not in data_train.columns:   
+ #   data_train['target'] = target.values
+#data_sample = data_train.sample(frac=1,replace=True, weights=weights)
+#target_sample = data_sample.target
+if 'target' in data_train.columns:
+    del data_train['target']
+
+#col = data_train.columns.tolist()
+#col.insert(0,'weights')
+#data_train.reindex(columns=col)
+#data_train['weights'] = weights
+
+
+# In[26]:
+
+
+def augment(x,y,t=2):
+    
+    xs,xn = [],[]
+    
+    for i in range(t):
+        print(i)
+        mask = y>0
+        x1 = x[mask].copy()
+        ids = np.arange(x1.shape[0])
+        for c in range(x1.shape[1]):
+            np.random.shuffle(ids)
+            x1[:,c] = x1[ids][:,c]
+        xs.append(x1)
+        
+    tt=0
+    if t==1:
+        tt=1
+    else:
+        tt=t//2
+    for i in range(tt):
+        mask = y==0
+        x1 = x[mask].copy()
+        ids = np.arange(x1.shape[0])
+        for c in range(x1.shape[1]):
+            np.random.shuffle(ids)
+            x1[:,c] = x1[ids][:,c]
+        xn.append(x1)
+
+    xs = np.vstack(xs)
+    xn = np.vstack(xn)
+    print(len(xs),len(xn))
+    ys = np.ones(xs.shape[0])
+    yn = np.zeros(xn.shape[0])
+    x = np.vstack([xs,xn])
+    y = np.concatenate([ys,yn])
+    print(len(x))
+    return x,y
+
+
+# In[30]:
+
+
+#d_t, ta = augment(data_train.values, target.values, t=1)
+d_t = pd.DataFrame(d_t, columns=data_test.columns)
+ta = pd.Series(ta)
+
+
+# In[29]:
+
+
+len(data_train)
+
+
+# In[37]:
+
+
+if 'target' in data_train.columns:
+    del data_train['target']
+
+
+features = [c for c in data_test.columns if c not in ['ID_code']]
+#features_out_s = [c for c in data_train.columns if c not in ['s']]
+param = {
+    'bagging_freq': 5,
+    'bagging_fraction': 0.335,
+    'boost_from_average':'false',
+    'boost': 'gbdt',
+    'feature_fraction': 0.041,
+    'learning_rate': 0.0083,
+    'max_depth': -1,
+    'metric':'auc',
+    'min_data_in_leaf': 80,
+    'min_sum_hessian_in_leaf': 10.0,
+    'num_leaves': 13,
+    'num_threads': 8,
+    'tree_learner': 'serial',
+    'objective': 'binary', 
+    'verbosity': -1
+}
+
+#data_train, target = augment(data_train.values, target.values)
+#data_train = pd.DataFrame(data_train,columns=features)
+#target = pd.Series(target)
+
+folds = KFold(n_splits=15, random_state=2319)
+trn_pre = np.zeros(len(data_train))
+oof = np.zeros(len(data_train))
+predictions = np.zeros(len(data_test))
+t = np.ones(len(data_train))
+clf=None
+
+features_data_out = ['ID_code', 'target', 'fold', 'p', 'auc']
+data_out = pd.DataFrame(columns=features_data_out)
+data_train['ID_code'] = data_train_id
+for fold_, (trn_idx, val_idx) in enumerate(folds.split(data_train.values, target.values)):
+    print("Fold {}".format(fold_))
+    val_d = data_train#.iloc[val_idx]
+    trn_d = data_train.iloc[trn_idx]
+    if 'ID_code' in val_d.columns:
+        val_id = val_d['ID_code']
+        del val_d['ID_code']
+        del trn_d['ID_code']
+    trn_lab = target.iloc[trn_idx]
+    #trn_data, trn_label = augment(trn_d.values, trn_lab.values, t=4)
+    trn_data = trn_d
+    trn_data = pd.DataFrame(trn_data, columns=features)
+    #if 's' in trn_data.columns:
+     #   del trn_data['s']
+    #val_data = data_train.iloc[val_idx][features]
+    val_label = target#.iloc[val_idx]
+    r'''
+    t_d = pd.DataFrame(scaler.transform(trn_data),columns=features_out_s)
+    col_s=0
+    for col in data_train.columns:
+        if col not in ['s', 'target']:
+            col_s += t_d[col]*cor_target[cor_target['level_1']==col][0].values
+    trn_data['s'] = col_s/s
+    #val_data = data_train.iloc[val_idx][features]
+    #val_label = target.iloc[val_idx]
+   
+    weights = np.zeros(len(trn_data))
+    for i in range(len(trn_label)):
+        if trn_label[i]==0:
+            weights[i]=0.1
+        else:
+            weights[i]=0.6
+    
+    
+    trn_data = data_train.iloc[trn_idx][features]
+    trn_label = target.iloc[trn_idx]
+    '''
+    
+    #trn_data = pd.concat([trn_data, d_t])
+    #trn_label = pd.concat([trn_lab, ta])
+    trn_data = d_t
+    trn_label = ta
+    trn_data = lgb.Dataset(trn_data, label=trn_label)#, weight=weights)
+    val_data = lgb.Dataset(val_d[features], label=target)#.iloc[val_idx])
+    
+    clf = lgb.train(param, trn_data, 1000000, valid_sets = [trn_data, val_data], verbose_eval=5000, early_stopping_rounds = 4000)
+    
+    trn_pre[trn_idx] = clf.predict(trn_d, num_iteration=clf.best_iteration)
+    oof[val_idx] = clf.predict(val_d[features], num_iteration=clf.best_iteration)
+    predictions += clf.predict(data_test[features], num_iteration=clf.best_iteration) / folds.n_splits
+    
+    t[trn_idx] = (1-trn_pre[trn_idx])*target.iloc[trn_idx]+trn_pre[trn_idx]*(1-target.iloc[trn_idx])
+    t[val_idx] = (1-oof[val_idx])*target.iloc[val_idx]+oof[val_idx]*(1-target.iloc[val_idx])
+    
+    idx_0 = (target.iloc[trn_idx][target.iloc[trn_idx]==0]).index
+    idx_1 = (target.iloc[trn_idx][target.iloc[trn_idx]==1]).index
+    idx_0_v = (target.iloc[val_idx][target.iloc[val_idx]==0]).index
+    idx_1_v = (target.iloc[val_idx][target.iloc[val_idx]==1]).index    
+    
+    print('train:', '\t', sum(t[idx_0])/len(idx_0), '\t', sum(t[idx_1])/len(idx_1))
+    print('valid:', '\t', sum(t[idx_0_v])/len(idx_0_v), '\t', sum(t[idx_1_v])/len(idx_1_v))
+    
+    roc_val = roc_auc_score(target.iloc[val_idx], oof[val_idx])
+    if roc_val<1:#['ID_code', 'target', 'fold', 'p', 'auc']
+        vd = pd.DataFrame(columns=features_data_out)
+        vd['ID_code'] = val_id
+        
+        vd['target'] = target.iloc[val_idx]
+        vd['fold'] = fold_
+        vd['p'] = oof[val_idx]
+        vd['auc'] = roc_val
+        data_out = pd.concat([data_out,vd])
+        
+print("CV score: {:<8.5f}".format(roc_auc_score(target, oof)))
+data_out.to_csv("D:/MLsource/data/santander-customer-transaction-prediction/data_out_1.csv", index=False)
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+sub = pd.DataFrame({"ID_code": data_test_id.values})
+sub["target"] = predictions
+sub.to_csv("D:/MLsource/data/santander-customer-transaction-prediction/submission_lgbm.csv", index=False)
+
+
+# In[7]:
+
+
+len(data_out)
+
+
+# In[2]:
+
+
+data_out = pd.read_csv("D:/MLsource/data/santander-customer-transaction-prediction/data_out.csv")
+
+
+# In[3]:
+
+
+data_out.columns
+
+
+# In[4]:
+
+
+data_out.head()
+
+
+# In[9]:
+
+
+auc_less_than_09 = data_out[data_out['auc']<0.9]
+
+
+# In[10]:
+
+
+auc_less_than_09.head()
+
+
+# In[11]:
+
+
+len(auc_less_than_09)
+
+
+# In[24]:
+
+
+data_out[data_out['target']==0]['p'].plot.kde(ind = 10000, label='0', legend=True)
+plt.show()
+
+
+# In[23]:
+
+
+data_out[data_out['target']==1]['p'].plot.hist()
+plt.show()
+
+
+# In[30]:
+
+
+data_out[data_out['target']==1]['p'].plot.hist()
+
+
+# In[31]:
+
+
+data_out[data_out['target']==0]['p'].plot.hist()
+
+
+# In[48]:
+
+
+from sklearn.decomposition import PCA
+from sklearn.decomposition import KernelPCA as KPCA
+from sklearn.preprocessing import StandardScaler
+
+
+# In[34]:
+
+
+pca = PCA(n_components=2, copy=True)
+
+
+# In[42]:
+
+
+s_d = StandardScaler().fit_transform(data_train[data_train['target']==1][features])
+pca_data = pca.fit_transform(s_d)
+
+
+# In[47]:
+
+
+plt.scatter(pca_data[:,0], pca_data[:,1], c=data_out[data_out['target']==1]['p'], cmap='Greens')
+
+
+# In[95]:
+
+
+p_06 = data_out[(data_out['target']==1) & (data_out['p']<0.6)]
+p_g_09 = data_out[(data_out['target']==1) & (data_out['p']>0.9)]
+
+
+# In[52]:
+
+
+len(p_06)
+
+
+# In[53]:
+
+
+p_06.ID_code
+
+
+# In[96]:
+
+
+id_06 = p_06.ID_code.values
+id_09 = p_g_09.ID_code.values
+
+
+# In[58]:
+
+
+data_target_1 = data_train[data_train['target']==1]
+
+
+# In[ ]:
+
+
+
+
+
+# In[97]:
+
+
+d_06 = data_target_1[data_target_1['ID_code'].isin(id_06)]
+d_09 = data_target_1[data_target_1['ID_code'].isin(id_09)]
+
+
+# In[100]:
+
+
+fig = plt.figure(figsize=(15,150))
+i = 1
+for c in features[120:200]:
+    fig.add_subplot(30,3,i)
+    d_06[c].plot.kde(ind=2000, label='less than 0.6', legend=True)
+    d_09[c].plot.kde(ind=2000, label='greater than 0.9', legend=True)
+    plt.title(c)
+    i += 1
+plt.show()
+
+
+# In[105]:
+
+
+v_num = [12,53,108,110,109,99,93,95,92,80,133,139,146,148,166,165,81]
+var = ['var_'+str(v_n) for v_n in v_num]
+
+
+# In[103]:
+
+
+from sklearn import manifold
+
+
+# In[109]:
+
+
+tsne = manifold.TSNE(perplexity=100, n_iter=100000, n_iter_without_progress=500, init='pca')
+d = pd.concat([d_06, d_09])
+t = tsne.fit_transform(d[var])
+print(tsne.n_iter_)
+
+
+# In[173]:
+
+
+fig = plt.figure(figsize=(12,6))
+t_p_06 = data_out[data_out['ID_code'].isin(id_06)]['p']
+t_p_09 = data_out[data_out['ID_code'].isin(id_09)]['p']
+t_p = pd.concat([t_p_06, t_p_09])
+
+plt.subplot(121)
+plt.scatter(t[:,0], t[:,1], c=t_p, cmap='Greens')
+
+tt = np.zeros((len(t),2))
+tt[:len(d_09)] = t[len(d_06):]
+tt[len(d_09):] = t[:len(d_06)]
+
+t_p_reverse = np.zeros(len(t_p))
+t_p_reverse[:len(d_09)] = t_p[len(d_06):]
+t_p_reverse[len(d_09):] = t_p[:len(d_06)]
+
+
+c = np.ones(len(d_06)+len(d_09))
+c[:len(d_09)]=1
+c[len(d_09):]=0.1
+plt.subplot(122)
+plt.scatter(t[:,0], t[:,1], c=t_p_reverse, cmap='Greens')
+plt.show()
+
+
+# In[166]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+if 'weights' in data_train.columns:
+    del data_train['weights']
+features = list(data_train.columns)
+#'is_unbalance':'true', 
+param = {
+    'bagging_freq': 5,      
+    'min_sum_hessian_in_leaf': 10.0,   
+    'objective': 'binary', 
+    'bagging_fraction': 0.3,  
+    'boost_from_average':'false',  
+    'verbosity': 1,
+    'boost': 'gbdt',       
+    'feature_fraction': 0.04,   
+    'learning_rate': 0.01,
+    'max_depth': -1,           
+    'metric':'auc',            
+    'min_data_in_leaf': 80,    
+    'num_leaves': 4,            
+    'num_threads': 32,           
+    'tree_learner': 'serial'
+}
+folds = StratifiedKFold(n_splits=15, shuffle=True)#, random_state=2319)
+oof = np.zeros(len(data_train))
+predictions = np.zeros(len(data_test))
+trn_pre = np.zeros(len(data_train))
+t = np.ones(len(data_train))
+for fold_, (trn_idx, val_idx) in enumerate(folds.split(data_train.values, target.values)):
+    print("Fold {}".format(fold_))
+    #data = data_train.iloc[trn_idx]
+    #data['target'] = target.iloc[trn_idx]
+    #data.sample(frac=1)
+    trn_data = lgb.Dataset(data_train.iloc[trn_idx][features], label=target.iloc[trn_idx], weight=weights[trn_idx])
+    val_data = lgb.Dataset(data_train.iloc[val_idx][features], label=target.iloc[val_idx])
+    clf = lgb.train(param, trn_data, 1000000, valid_sets = [trn_data, val_data], verbose_eval=5000, early_stopping_rounds = 4000)
+    oof[val_idx] = clf.predict(data_train.iloc[val_idx][features], num_iteration=clf.best_iteration)
+    predictions += clf.predict(data_test[features], num_iteration=clf.best_iteration) / folds.n_splits
+    trn_pre[trn_idx] = clf.predict(data_train.iloc[trn_idx][features], num_iteration=clf.best_iteration)
+    t[trn_idx] = (1-trn_pre[trn_idx])*target.iloc[trn_idx]+trn_pre[trn_idx]*(1-target.iloc[trn_idx])
+    t[val_idx] = (1-oof[val_idx])*target.iloc[val_idx]+oof[val_idx]*(1-target.iloc[val_idx])
+    idx_0 = (target.iloc[trn_idx][target.iloc[trn_idx]==0]).index
+    idx_1 = (target.iloc[trn_idx][target.iloc[trn_idx]==1]).index
+    idx_0_v = (target.iloc[val_idx][target.iloc[val_idx]==0]).index
+    idx_1_v = (target.iloc[val_idx][target.iloc[val_idx]==1]).index    
+    print('train:', '\t', sum(t[idx_0])/len(idx_0), '\t', sum(t[idx_1])/len(idx_1))
+    print('valid:', '\t', sum(t[idx_0_v])/len(idx_0_v), '\t', sum(t[idx_1_v])/len(idx_1_v))
+
+#print("CV score: {:<8.5f}".format(roc_auc_score(target, oof)))
+
+
+# In[75]:
+
+
+sub = pd.DataFrame({"ID_code": data_test_id.values})
+sub["target"] = predictions
+sub.to_csv("D:/MLsource/data/santander-customer-transaction-prediction/submission_lgbm.csv", index=False)
+
+
+# In[74]:
+
+
+print("CV score: {:<8.5f}".format(roc_auc_score(target, oof)))
+
+
+booster = clf.booster_
+feature_importance = booster.feature_importance
+feature_name = booster.feature_name()
+fi = pd.DataFrame({'feature_name':feature_name, 
+                   'feature_importance':feature_importance})
+
+
+# In[ ]:
+
+
+import matplotlib.pyplot as plt
+
+
+# In[58]:
+
+
+lgb.plot_importance(clf, max_num_features=10)
+plt.title('feature importance')
+plt.show()
+
+
+# In[5]:
+
+
+d = data_train.sample(frac=1)
+
+
+# In[6]:
+
+
+d.head()
+
+
+# In[7]:
+
+
+data_train.head()
+
+
+# ## Hyperopt
+
+# In[2]:
+
+
+from hyperopt import hp
+from hyperopt import STATUS_OK
+import lightgbm as lgb
+
+
+# In[8]:
+
+
+N_FOLDS = 15
+data_train['target'] = target
+d = data_train.sample(frac=1)
+t = d['target']
+del d['target']
+train_set = lgb.Dataset(d, t)
+
+def objective(params):#, n_folds=N_FOLDS): nfold=n_folds,
+    
+    cv_results = lgb.cv(params, train_set, num_boost_round=1000000, metrics='auc',
+                        early_stopping_rounds=4000)
+    
+    best_score = max(cv_results['auc-mean'])
+    
+    loss = 1 - best_score
+    
+    return {'loss':loss, 'params':params, 'status':STATUS_OK}
+
+space = {
+    'class_weight': hp.choice('class_weight', [None, 'balanced']),
+    'bagging_freq': hp.choice('bagging_freq', list(range(1,100,2))),
+    'bagging_fraction': hp.uniform('bagging_fraction', 0.1, 1),
+    #'boosting_type': hp.choice('boosting_type',[
+     #   {'boosting_type':'gbdt', 'subsample': hp.uniform('gbdt_subsample', 0.1, 1)},
+      #  {'boosting_type':'dart', 'subsample': hp.uniform('dart_subsample', 0.1, 1)},
+       # {'boosting_type':'goss'}]),
+    'subsample': hp.uniform('subsample', 0.1, 1),
+    'num_leaves': hp.choice('num_leaves',list(range(4,20))),
+    'min_data_in_leaf': hp.choice('min_data_in_leaf', list(range(0,3000,10))),
+    'learning_rate': hp.loguniform('learning_rate', np.log(0.005), np.log(0.4)),
+    #'bagging_freq': hp.quniform('bagging_freq', 1,20,2),
+    #'bagging_fraction': hp.uniform('bagging_fraction', 0.1, 1)
+    #'feature_fraction': hp.uniform(0.1, 1),    
+    'colsample_bytree': hp.uniform('colsample_bytree', 0.1, 1),
+    'nfold': hp.choice('nfold', list(range(1,100,1)))
+}
+
+
+# In[4]:
+
+
+from hyperopt import tpe
+
+tpe_algo = tpe.suggest
+
+
+# In[6]:
+
+
+from hyperopt import Trials
+
+bayes_trials = Trials()
+
+
+# In[13]:
+
+
+import csv
+out_file = 'D:/MLsource/data/santander-customer-transaction-prediction/gbm_trials.csv'
+
+with open(out_file, 'w') as f:
+    w = csv.writer(f)
+    w.writerow(['loss', 'params', 'iteration', 'estimators', 'train_time'])
+
+
+# In[5]:
+
+
+from hyperopt import fmin
+
+max_evals = 10000
+
+best = fmin(fn=objective, space = space, algo = tpe_algo, max_evals = max_evals)#, trials = bayes_trials)
+
+
+# In[8]:
+
+
+best
+
+
+
+
+
+
+
